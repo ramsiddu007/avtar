@@ -1,0 +1,41 @@
+Prob: Find the Last Modified date and time for Functions?
+
+Sol:
+
+* Check track commit is on or off using the following query
+
+show track_commit_timestamp;
+
+If it return "ON" go to step 3 else modify postgresql.conf
+in Linux Environment
+---------------------
+
+cd /etc/postgresql/9.5/main/
+vi postgresql.conf
+Change
+
+track_commit_timestamp = off
+to
+
+track_commit_timestamp = on
+
+
+in Windows Environment:
+--------------------
+open postgresql.conf file
+
+#track_commit_timestamp = off
+change to
+track_commit_timestamp = on
+
+You don't have to reboot the system after modifiy the value, just restart the process. 
+e.g. sudo service postgresql restart -- In Linux
+or
+
+In windows 
+go to run --> services.msc --> select postgresql server --> click restart
+
+
+select pg_xact_commit_timestamp(xmin) as last_alterd_datentime, * from pg_proc where proname ilike 'func_test';
+
+Note: After changing track_commit_timestamp value to "on" only pg_xact_commit_timestamp funtion will work. 
