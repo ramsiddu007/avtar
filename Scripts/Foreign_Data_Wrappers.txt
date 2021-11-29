@@ -1,0 +1,33 @@
+ Source Serve (TestDB1)r:
+-----------------
+
+-- drop table dept
+-- create table dept(deptno smallint, dname character varying(50), location character varying(50));
+	--insert into dept values (10, 'Product - Development', 'Hyderabad'), (20, 'Product - Sales', 'Pune'), (30, 'Product - Marketing', 'Bangalore');
+-- select * from dept
+CREATE TABLE employee
+(empid int, eame character varying(20), deptno smallint);
+
+insert into employee values (101, 'Einstein', 10), (102, 'Saleem Ali', 20), (103, 'Adison', 30);
+
+Destination Server (TestDB2):
+--------------------------------
+-- Destination Server
+-- drop extension postgres_fdw
+create extension postgres_fdw;
+
+-- drop server fdw_hr cascade
+CREATE SERVER fdw_hr
+ FOREIGN DATA WRAPPER postgres_fdw
+ OPTIONS (dbname 'TestDB1', host '192.168.52.25', port '5432');
+ 
+ -- drop user app_user;
+ CREATE USER MAPPING for postgres
+SERVER fdw_hr
+OPTIONS (user 'postgres', password 'Qazwsx@12');
+
+IMPORT FOREIGN SCHEMA "public" FROM SERVER fdw_hr INTO public;
+IMPORT FOREIGN SCHEMA "public" except (dept, employee) FROM SERVER fdw_hr INTO public;
+
+select * from dept;
+select * from employee;
