@@ -10,6 +10,8 @@ CREATE TABLE employee
 
 insert into employee values (101, 'Einstein', 10), (102, 'Saleem Ali', 20), (103, 'Adison', 30);
 
+
+
 Destination Server (TestDB2):
 --------------------------------
 -- Destination Server
