@@ -1,4 +1,6 @@
 SR-456788
+--PG Deploy
+PGUSER=pgdeployuser PGPASSWORD=SBAn@lyt1cs2020 ENV=QA DRY_RUN=1 sh /home/rms/tmp/ysconfig/aodb/pgdeploy/pgdeploy.sh -i -v -p /home/rms/tmp/ysconfig/aodb
 
 -- rainbow interface on psql
 $ sudo snap install lolcat
@@ -9,6 +11,8 @@ Source: https://akorotkov.github.io/blog/2021/05/17/rainbow-psql-output/
 rgunde@rcoylswwtom001 
 
 sudo su - rms
+-- AWS EC2 
+psql -f install-postgresql.sql -h ec2-15-207-84-94.ap-south-1.compute.amazonaws.com -p 5432 -U postgres mydb
  
 psql -h rcsyaodbpgr001.realpage.com -U rms -d postgres
 \c ysanalysis
@@ -1269,3 +1273,58 @@ SELECT DISTINCT *
 FROM vac
 UNION
 SELECT * FROM ana ORDER BY 1 DESC;
+-----
+CREATE OR REPLACE FUNCTION "public"."dropfunction" (_functionname text, _schemaname text DEFAULT NULL::text)  RETURNS void
+  VOLATILE
+AS $body$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT p.oid::regprocedure::TEXT AS name, p.prokind
+    FROM pg_proc p
+    JOIN pg_namespace n ON
+      p.pronamespace = n.oid
+    WHERE
+      proname = lower(_FunctionName)
+      AND (_SchemaName IS NULL
+        OR n.nspname = lower(_SchemaName))
+  LOOP
+    IF r.prokind = 'f' THEN
+      EXECUTE 'DROP FUNCTION ' || r.name || ' CASCADE';
+    ELSE
+      EXECUTE 'DROP PROCEDURE ' || r.name || ' CASCADE';
+    END IF;
+  END LOOP;
+END;
+$body$ LANGUAGE plpgsql
+------------------------- ****************** -----------------------
+Postgres Diaries #1
+Do not drop pglogical extension without dropping the local node and replication set. Just dropping the logical replication slot and then dropping extension does not work.
+Failing to do so will create a Database Exclusive Lock and lead to DB hung.
+Steps to drop pglogical extension
+REVOKE USAGE ON SCHEMA pglogical FROM <username/role>;
+REVOKE ALL ON ALL TABLES in SCHEMA pglogical FROM <user>;
+SELECT pglogical.drop_node('postgresrds1');
+SELECT pglogical.drop_replication_set('set1');
+DROP EXTENSION pglogical;
+\dx
+DROP schema if exists pglogical ;
+Also Remove ‘pglogical’ from shared_preload_libraries and restart DB.
+So plan this activity during downtime period.
+
+Postgres Diaries #2
+The easiest way to create and manage Partitions in AWS RDS Postgres is by using pg_partman and pg_cron
+1. Create schema for pg_partman.
+2. Create extension  pg_partman  and pg_cron (shared_preload_libraries=pg_cron <- This will need DB restart)
+3. Create the Partitioned table (No need to create its partitions)
+4. Use partman.create_parent () to create the child Partitions. You have to mention the parent table that you created earlier. This function gives you the option to specify the partitioning column, type, interval, number of partitions.
+5. Run UPDATE on partman.part_config to adjust the partitioning config settings for the partitioned table (like able to automatically create partitions, retention, etc)
+6. Schedule using SELECT cron.schedule and call the partman.run_maintenance_proc() to schedule your partition maintenance.
+
+
+Important things to consider when choosing Replication setups between Postgres and MySQL
+1. Postgres Replication- No Automatic Failover to secondary (either use pg_ctl promote or need to have the TRIGGER file). EDB ADVANCED SERVER Has FAILOVER MANAGER to do automatic failover, whereas MYSQL GROUP REPLICATION in InnoDB Cluster using MYSQL ROUTER 8.0 provides automatic failover. MySQL Group Replication is very similar to MSSQL Always ON AG.
+Note:- In AWS RDS (Postgres) when you have multi-AZ, The replication is Volume Based Snapshot replication and auto failover happens.
+2. Postgres does not provide Synchronous Multi-master Replication, whereas MySQL Provides Multi-master Replication using both NDB Cluster (Synchronous within NDB Cluster) and InnoDB Cluster Group replication (async multi-master). In multi-primary mode set group_replication_single_primary_mode=OFF
+Note:- You can use Bucardo to get async multi-master in PG.
+3. Routing and Load Balancing challenge in PG but MYSQL InnoDB Cluster Uses MySQL Router which is bootstrapped against the InnoDB Cluster using MySQL Shell Admin API and manual Configuration for routing and Load balancing not required. Group Replication uses GCS to detect failover, membership and transaction ordering.
